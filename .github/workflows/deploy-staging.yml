@@ -1,0 +1,50 @@
+# After CI passes on main: deploy that exact commit's images to staging, then prove it with the smoke test.
+name: Deploy staging
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+permissions:
+  contents: read
+  deployments: write
+concurrency:
+  group: deploy-staging
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    if: github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push'
+    runs-on: ubuntu-24.04
+    environment:
+      name: staging
+      url: https://staging.${{ vars.DOMAIN }}
+    env:
+      SHA: ${{ github.event.workflow_run.head_sha }}
+      OWNER: ${{ github.repository_owner }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+      - name: Deploy API (host runs scripts.predeploy first; a failure there keeps the old release)
+        env:
+          HOOK: ${{ secrets.RENDER_DEPLOY_HOOK_API }}
+        run: ops/deploy.sh "$HOOK" "ghcr.io/$OWNER/eco-api:$SHA"
+      - name: Deploy web
+        env:
+          HOOK: ${{ secrets.RENDER_DEPLOY_HOOK_WEB }}
+        run: ops/deploy.sh "$HOOK" "ghcr.io/$OWNER/eco-web:$SHA"
+      - name: Wait for the new release
+        run: ops/wait_release.sh "https://api.staging.${{ vars.DOMAIN }}" "$SHA"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Smoke test (full journey with a throwaway account, real AI)
+        working-directory: eco-backend
+        run: |
+          pip install httpx==0.27.2 psycopg[binary]==3.2.13
+          python -m scripts.smoke --mode staging --release "$SHA" \
+            --web "https://staging.${{ vars.DOMAIN }}" --api "https://api.staging.${{ vars.DOMAIN }}"
+      - name: Record this commit as promotable
+        if: success()
+        run: echo "staging-verified $SHA" >> "$GITHUB_STEP_SUMMARY"

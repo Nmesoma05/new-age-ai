@@ -1,0 +1,101 @@
+# Manual promotion of a commit that is ALREADY verified on staging. Needs a second person's approval
+# (GitHub environment "production" with required reviewers). Rolls back automatically if the smoke test fails.
+name: Deploy production
+on:
+  workflow_dispatch:
+    inputs:
+      sha:
+        description: Commit SHA that passed "Deploy staging"
+        required: true
+      reason:
+        description: What this release contains (goes in the deploy log)
+        required: true
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+jobs:
+  gates:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.sha }}
+      - name: The commit passed staging
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SHA: ${{ inputs.sha }}
+        run: |
+          ok=$(gh run list --workflow "Deploy staging" --json headSha,conclusion --limit 50 \
+               --jq "[.[] | select(.headSha==\"$SHA\" and .conclusion==\"success\")] | length")
+          [ "$ok" -ge 1 ] || { echo "::error::$SHA has no successful staging deploy"; exit 1; }
+      - name: Legal pages approved (no draft marker, no placeholders)
+        working-directory: eco-web
+        run: node scripts/check-legal.mjs
+      - name: Not during a freeze
+        env:
+          FREEZE: ${{ vars.DEPLOY_FREEZE }}
+        run: |
+          [ "$FREEZE" != "true" ] || { echo "::error::deploy freeze is on"; exit 1; }
+
+  deploy:
+    needs: gates
+    runs-on: ubuntu-24.04
+    environment:
+      name: production
+      url: https://app.${{ vars.DOMAIN }}
+    env:
+      SHA: ${{ inputs.sha }}
+      OWNER: ${{ github.repository_owner }}
+      API: https://api.${{ vars.DOMAIN }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.sha }}
+      - name: Remember the release we're replacing (rollback target)
+        id: prev
+        run: echo "release=$(curl -sf "$API/health" | python3 -c 'import json,sys; print(json.load(sys.stdin)["release"])')" >> "$GITHUB_OUTPUT"
+      - name: Deploy API (pre-deploy gate, backup, migrate run on the host)
+        env:
+          HOOK: ${{ secrets.RENDER_DEPLOY_HOOK_API }}
+        run: ops/deploy.sh "$HOOK" "ghcr.io/$OWNER/eco-api:$SHA"
+      - name: Deploy web
+        env:
+          HOOK: ${{ secrets.RENDER_DEPLOY_HOOK_WEB }}
+        run: ops/deploy.sh "$HOOK" "ghcr.io/$OWNER/eco-web:$SHA"
+      - name: Wait for the new release
+        run: ops/wait_release.sh "$API" "$SHA"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Smoke test (no data created; synthetic account sign-in)
+        id: smoke
+        working-directory: eco-backend
+        env:
+          SMOKE_EMAIL: ${{ secrets.SMOKE_EMAIL }}
+          SMOKE_PASSWORD: ${{ secrets.SMOKE_PASSWORD }}
+        run: |
+          pip install httpx==0.27.2 psycopg[binary]==3.2.13
+          python -m scripts.smoke --mode production --release "$SHA" --web "https://app.${{ vars.DOMAIN }}" --api "$API"
+      - name: Roll back to the previous release
+        if: failure() && steps.prev.outputs.release != ''
+        env:
+          HOOK_API: ${{ secrets.RENDER_DEPLOY_HOOK_API }}
+          HOOK_WEB: ${{ secrets.RENDER_DEPLOY_HOOK_WEB }}
+          PREV: ${{ steps.prev.outputs.release }}
+        run: |
+          echo "::error::Smoke test failed. Rolling back to $PREV (schema stays: migrations are additive)."
+          ops/deploy.sh "$HOOK_API" "ghcr.io/$OWNER/eco-api:$PREV"
+          ops/deploy.sh "$HOOK_WEB" "ghcr.io/$OWNER/eco-web:$PREV"
+          ops/wait_release.sh "$API" "$PREV"
+      - name: Log
+        if: always()
+        env:
+          REASON: ${{ inputs.reason }}
+          STATUS: ${{ job.status }}
+          ACTOR: ${{ github.actor }}
+        run: |
+          echo "production $STATUS - $SHA by $ACTOR - $REASON" >> "$GITHUB_STEP_SUMMARY"

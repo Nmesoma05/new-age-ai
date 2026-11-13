@@ -1,0 +1,83 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* New Age AI design system tokens (RGB triplets so Tailwind can apply opacity). Cream is the canvas, black is the
+   frame, orange is the action. Generated from the design system's tokens.json. */
+:root {
+  --cream: 244 235 221;
+  --cream-raised: 251 246 238;
+  --cream-sunken: 234 223 204;
+  --line: 215 201 180;
+  --control-border: 140 127 112;
+  --ink: 23 23 23;
+  --ink-muted: 92 82 72;
+  --orange: 244 119 33;
+  --on-orange: 23 23 23;
+  --orange-text: 169 69 0;
+  --orange-soft: 253 227 207;
+  --focus-ring: 23 23 23;
+  --sidebar-bg: 23 23 23;
+  --sidebar-ink: 244 235 221;
+  --sidebar-muted: 169 156 140;
+  --sidebar-hover: 42 39 36;
+  --d1-creator: 91 63 217;
+  --d1-soft: 231 224 255;
+  --d2-business: 31 107 79;
+  --d2-soft: 217 237 227;
+  --d3-freelancer: 30 95 140;
+  --d3-soft: 220 234 245;
+  --on-division: 244 235 221;
+  --success: 45 106 31;
+  --success-soft: 221 235 211;
+  --warning: 138 90 0;
+  --warning-soft: 246 227 188;
+  --danger: 179 38 30;
+  --danger-soft: 248 217 213;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --cream: 23 23 23;
+    --cream-raised: 34 33 32;
+    --cream-sunken: 15 15 15;
+    --line: 58 54 49;
+    --control-border: 122 112 102;
+    --ink: 244 235 221;
+    --ink-muted: 169 156 140;
+    --orange: 244 119 33;
+    --on-orange: 23 23 23;
+    --orange-text: 255 154 82;
+    --orange-soft: 58 34 19;
+    --focus-ring: 244 235 221;
+    --sidebar-bg: 15 15 15;
+    --sidebar-ink: 244 235 221;
+    --sidebar-muted: 169 156 140;
+    --sidebar-hover: 34 33 32;
+    --d1-creator: 168 150 255;
+    --d1-soft: 42 35 80;
+    --d2-business: 95 199 158;
+    --d2-soft: 22 48 42;
+    --d3-freelancer: 111 182 232;
+    --d3-soft: 20 40 58;
+    --on-division: 23 23 23;
+    --success: 127 207 106;
+    --success-soft: 27 42 22;
+    --warning: 242 184 75;
+    --warning-soft: 51 39 14;
+    --danger: 255 138 128;
+    --danger-soft: 58 23 20;
+    color-scheme: dark;
+  }
+}
+
+html, body { background: rgb(var(--cream)); color: rgb(var(--ink)); }
+body { font-family: "Instrument Sans", system-ui, -apple-system, "Segoe UI", sans-serif; font-size: 15px; line-height: 22px; }
+h1, h2, h3 { text-wrap: balance; }
+:focus-visible { outline: 2px solid rgb(var(--focus-ring)); outline-offset: 2px; }
+.tabular { font-variant-numeric: tabular-nums; }
+.skeleton { background: linear-gradient(90deg, rgb(var(--cream-sunken)) 0%, rgb(var(--cream-raised)) 50%, rgb(var(--cream-sunken)) 100%);
+  background-size: 800px 100%; }
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 1ms !important; transition-duration: 1ms !important; }
+}

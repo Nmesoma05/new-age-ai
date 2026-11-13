@@ -1,0 +1,9 @@
+.git
+node_modules
+.next
+e2e
+.env
+.env.*
+!.env.example
+*.zip
+tsconfig.tsbuildinfo

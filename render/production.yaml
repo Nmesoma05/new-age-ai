@@ -1,0 +1,99 @@
+# Render Blueprint: production. Field names checked against https://render.com/docs/blueprint-spec (Nov 2026).
+# Images are built and scanned by GitHub Actions and deployed by digest; Render never builds from source here.
+# Secrets live in the env group `eco-secrets` (created in the dashboard, values never in git).
+databases:
+  - name: eco-db
+    region: frankfurt
+    postgresMajorVersion: "16"        # the tested version; Render's default is newer
+    plan: 4c-16g   # size from load tests; resize later without data loss [verify]
+    diskSizeGB: 50
+    ipAllowList: []                    # private network only
+    highAvailability:
+      enabled: true
+
+services:
+  - type: web
+    name: eco-api
+    runtime: image
+    image:
+      url: ghcr.io/OWNER/eco-api:REPLACED_BY_PIPELINE
+      creds: {fromRegistryCreds: {name: ghcr}}
+    region: frankfurt
+    plan: 2c-4g
+    numInstances: 2
+    healthCheckPath: /ready            # new instances get traffic only when DB, schema, storage and scanner are OK
+    preDeployCommand: python -m scripts.predeploy   # gate + backup + migrate; failure aborts the deploy
+    maxShutdownDelaySeconds: 30
+    autoDeployTrigger: "off"           # deploys come only from the pipeline
+    domains: [api.DOMAIN]
+    envVars:
+      - fromGroup: eco-secrets
+      - key: ENV
+        value: prod
+      - key: LOG_FORMAT
+        value: json
+      - key: WEB_CONCURRENCY
+        value: "2"
+      - key: DATABASE_URL          # eco_app role (row-level security applies); set by hand, never the owner URL
+        sync: false
+      - key: MIGRATIONS_DATABASE_URL   # owner role; used only by the pre-deploy step and jobs
+        sync: false
+      - key: CLAMAV_HOST
+        fromService: {name: eco-clamav, type: pserv, property: host}
+      - key: CLAMAV_PORT
+        value: "3310"
+      - key: STORAGE_BACKEND
+        value: s3
+      - key: EMAIL_BACKEND
+        value: smtp
+  - type: web
+    name: eco-web
+    runtime: image
+    image:
+      url: ghcr.io/OWNER/eco-web:REPLACED_BY_PIPELINE
+      creds: {fromRegistryCreds: {name: ghcr}}
+    region: frankfurt
+    plan: 1c-2g
+    numInstances: 2
+    healthCheckPath: /login
+    autoDeployTrigger: "off"
+    domains: [app.DOMAIN]
+    envVars:
+      - key: API_URL
+        value: https://api.DOMAIN
+      - key: COOKIE_SECURE
+        value: "true"
+      - key: TRUST_FORWARDED_FOR       # Render's proxy sets X-Forwarded-For [verify on staging: audit log shows real IPs]
+        value: "true"
+
+  - type: pserv                         # virus scanner, reachable only on the private network
+    name: eco-clamav
+    runtime: image
+    image: {url: "docker.io/clamav/clamav:stable"}   # pin a digest; signatures self-update via freshclam
+    region: frankfurt
+    plan: 1c-2g   # ClamAV needs ~1-2 GB RAM for signatures [verify]
+
+  - type: cron
+    name: eco-backup
+    runtime: image
+    image: {url: ghcr.io/OWNER/eco-api:REPLACED_BY_PIPELINE, creds: {fromRegistryCreds: {name: ghcr}}}
+    region: frankfurt
+    schedule: "15 2 * * *"              # daily 02:15 UTC (03:15 Lagos)
+    dockerCommand: python -m scripts.backup
+    envVars: [{fromGroup: eco-secrets}]
+  - type: cron
+    name: eco-purge
+    runtime: image
+    image: {url: ghcr.io/OWNER/eco-api:REPLACED_BY_PIPELINE, creds: {fromRegistryCreds: {name: ghcr}}}
+    region: frankfurt
+    schedule: "45 2 * * *"
+    dockerCommand: python -m scripts.purge_deleted --apply
+    envVars: [{fromGroup: eco-secrets}]
+  - type: cron
+    name: eco-restore-drill
+    runtime: image
+    image: {url: ghcr.io/OWNER/eco-api:REPLACED_BY_PIPELINE, creds: {fromRegistryCreds: {name: ghcr}}}
+    region: frankfurt
+    schedule: "30 4 1 * *"              # monthly, into a separate drill database server (RESTORE_ADMIN_URL)
+    dockerCommand: python -m scripts.restore_drill
+    envVars: [{fromGroup: eco-secrets}]

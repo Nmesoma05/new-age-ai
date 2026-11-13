@@ -1,0 +1,2 @@
+# Production-only additions (the image installs requirements.txt + this file).
+sentry-sdk==2.19.2

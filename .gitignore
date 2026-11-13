@@ -1,0 +1,16 @@
+# secrets: never commit these (CI also refuses them)
+.env
+.env.*
+!.env.example
+# dependencies and builds
+node_modules/
+.next/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+tsconfig.tsbuildinfo
+# local data and test output
+eco-backend/var/
+eco-web/e2e/out/
+*.zip
