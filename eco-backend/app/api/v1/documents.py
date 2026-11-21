@@ -44,6 +44,9 @@ async def _read_limited(upload: UploadFile, limit: int) -> bytes:
 async def upload_document(file: UploadFile = File(...), project_id: uuid.UUID | None = Form(default=None),
                           ctx: WsCtx = Depends(ws_ctx), embedder=Depends(get_embedder)):
     await ctx.require("ws.write")
+    if not get_settings().uploads_enabled:
+        raise AppError(503, "uploads_disabled", "Uploads are off",
+                       "File uploads are turned off in this preview. Everything else works as normal.")
     if project_id:
         pr = await ctx.session.get(Project, project_id)
         if pr is None or pr.workspace_id != ctx.workspace.id:

@@ -5,7 +5,7 @@ Put these at the root of the monorepo, next to `eco-backend/` and `eco-web/`:
 ```
 .github/workflows/   ci.yml, deploy-staging.yml, deploy-production.yml
 ops/                 deploy.sh (Render deploy hook + exact image), wait_release.sh (release live + ready)
-render/              staging.yaml, production.yaml (Render Blueprints)
+render/              staging.yaml, production.yaml, preview.yaml (private preview; ENV=preview) (Render Blueprints)
 runbooks/            deploy-and-rollback, incident-response, disaster-recovery, secrets
 LAUNCH_PLAN.md/.pdf  the launch-readiness plan, go-live checklist, risks and phased rollout
 ```

@@ -3,7 +3,7 @@
 .env.*
 !.env.example
 # dependencies and builds
-node_modules/
+node_modules
 .next/
 __pycache__/
 *.pyc

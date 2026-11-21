@@ -18,3 +18,14 @@ owner), or **superseded**.
 | 2026-11-13 | Account deletion: anonymise the person at once; erase solely-owned organisations (files included) after 30 days; keep work done in other organisations' workspaces, credited to "Deleted user" | Erasure right vs. agencies' own records; 30-day grace for mistakes | awaiting approval |
 | 2026-11-13 | Draft privacy policy and terms in the repo, blocked from production by a release gate until counsel approves | Product must show real policies; drafts must never ship as final | awaiting approval |
 | 2026-11-13 | Migrations are additive only (expand/contract), enforced by `scripts/migration_safety` | Old code keeps working during deploys and after rollbacks | awaiting approval |
+
+## Private preview on Render (ENV=preview), 2026-11-21 — awaiting approval of spend
+- New `ENV=preview`: counts as deployed (https, JSON logs, API docs hidden, AI daily budget + model prices required)
+  but allows `UPLOADS_ENABLED=false` (then local storage and no scanner are accepted), `EMAIL_BACKEND=none`, and
+  requires `SIGNUP_ALLOWLIST`. staging and prod keep every guard (tested).
+- `render/preview.yaml`: Postgres 16 (basic-256mb), the API as a **private service** (no public URL), the web as the
+  only public service. Render builds from the Dockerfiles in this repo.
+- Database roles: Render's default user (not a superuser) is the owner and runs migrations; `scripts/render_start.py`
+  creates the restricted `eco_app` role (checked: no superuser/BYPASSRLS/CREATEROLE) and starts the API as eco_app.
+- No backups beyond what Render's plan provides; no uploads, so no file storage to back up.
+- Blank secret fields (e.g. OPENAI_API_KEY left empty in the dashboard) mean "not configured".

@@ -36,6 +36,10 @@ async def create_personal_org(session: AsyncSession, user: User, product: str | 
 async def signup(session: AsyncSession, *, email: str, password: str, display_name: str, country: str | None,
                  currency: str | None, product: str | None, request: Request,
                  accept_terms: bool = False) -> tuple[User, Organisation]:
+    allow = get_settings().signup_allowlist
+    if allow and email.lower() not in {a.strip().lower() for a in allow}:
+        raise AppError(403, "signup_closed", "Sign-up is invite-only",
+                       "This preview is private. Ask the New Age AI team for an invite.")
     terms = get_settings().legal_terms_version
     if terms and not accept_terms:
         raise AppError(422, "terms_required", "Accept the terms to continue",

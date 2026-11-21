@@ -68,6 +68,8 @@ async def health():
 @router.get("/ready")
 async def ready():
     checks = {"database": _db, "storage": _storage, "scanner": _scanner}
+    if not get_settings().uploads_enabled:  # preview: no file storage or scanner to check
+        checks = {"database": _db}
     results: dict[str, bool] = {}
     for name, fn in checks.items():
         try:

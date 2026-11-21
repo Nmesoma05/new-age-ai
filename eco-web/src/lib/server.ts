@@ -3,7 +3,9 @@
 import "server-only";
 import { NextRequest, NextResponse } from "next/server";
 
-export const API_URL = (process.env.API_URL || "http://localhost:8000").replace(/\/$/, "");
+// A bare "host:port" (how Render hands over a private service's address) means plain http on the private network.
+const rawApi = (process.env.API_URL || "http://localhost:8000").replace(/\/$/, "");
+export const API_URL = /^https?:\/\//.test(rawApi) ? rawApi : `http://${rawApi}`;
 export const ACCESS = "eco_at";
 export const REFRESH = "eco_rt";
 const secure = process.env.COOKIE_SECURE === "true";

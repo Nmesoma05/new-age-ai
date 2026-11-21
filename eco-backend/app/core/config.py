@@ -1,7 +1,7 @@
 from functools import lru_cache
 from typing import Literal
 
-from pydantic import Field, SecretStr, model_validator
+from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -13,7 +13,9 @@ class Settings(BaseSettings):
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
-    env: Literal["dev", "test", "staging", "prod"] = "dev"  # staging gets every production guard
+    # staging gets every production guard. "preview" is a private online preview: deployed (https, JSON logs, no API
+    # docs, AI budget and prices required) but with uploads and email off and sign-up limited to SIGNUP_ALLOWLIST.
+    env: Literal["dev", "test", "preview", "staging", "prod"] = "dev"
     database_url: SecretStr  # app role (eco_app), e.g. postgresql+psycopg://eco_app:...@host/eco
     db_pool_size: int = 10
 
@@ -24,6 +26,8 @@ class Settings(BaseSettings):
     access_token_ttl_minutes: int = 15
     refresh_token_ttl_days: int = 30
     login_max_failures: int = 10
+    # Emails allowed to create an account (JSON list, lower case). Empty = anyone. Required in preview.
+    signup_allowlist: list[str] = []
     login_lockout_minutes: int = 15
     # Per-IP limits on unauthenticated endpoints (0 = off). The client IP comes from X-Forwarded-For only via
     # TRUSTED_PROXIES (our web server, load balancer). JSON list of CIDRs.
@@ -66,6 +70,7 @@ class Settings(BaseSettings):
     s3_bucket: str | None = None
     s3_endpoint_url: str | None = None
     max_upload_bytes: int = 20 * 1024 * 1024
+    uploads_enabled: bool = True                # false: document uploads are refused with a clear message (preview)
     file_scanner: Literal["clamav", "disabled_dev_only"] = "clamav"
     clamav_host: str = "localhost"
     clamav_port: int = 3310
@@ -110,9 +115,16 @@ class Settings(BaseSettings):
     ai_budget_alert_ratio: float = 0.8              # log an alert once spend passes this share of the budget
     legal_terms_version: str | None = None          # version users accept at sign-up; required when deployed
 
+    @field_validator("openai_api_key", "anthropic_api_key", "paystack_secret_key", "sentry_dsn", "smtp_password",
+                     "google_oauth_client_secret", mode="before")
+    @classmethod
+    def _blank_secret_is_unset(cls, v):
+        # a host dashboard field left empty means "not configured", never "an empty key"
+        return None if isinstance(v, str) and not v.strip() else v
+
     @property
     def is_deployed(self) -> bool:
-        return self.env in ("staging", "prod")
+        return self.env in ("preview", "staging", "prod")
 
     @model_validator(mode="after")
     def _production_guards(self) -> "Settings":
@@ -121,13 +133,17 @@ class Settings(BaseSettings):
             pk = self.paystack_secret_key.get_secret_value() if self.paystack_secret_key else ""
             if self.env == "prod" and pk.startswith("sk_test_"):
                 raise ValueError("a Paystack TEST key is configured in production")
-            if self.env == "staging" and pk.startswith("sk_live_"):
-                raise ValueError("a Paystack LIVE key is configured in staging")
-            if self.storage_backend == "local":
+            if self.env in ("staging", "preview") and pk.startswith("sk_live_"):
+                raise ValueError(f"a Paystack LIVE key is configured in {self.env}")
+            preview_no_uploads = self.env == "preview" and not self.uploads_enabled
+            if self.storage_backend == "local" and not preview_no_uploads:
                 raise ValueError("deployed environments need STORAGE_BACKEND=s3 (container disks are not durable)")
-            if self.email_backend != "smtp" or not (self.smtp_host and self.email_from and self.smtp_password):
+            smtp_ok = self.email_backend == "smtp" and bool(self.smtp_host and self.email_from and self.smtp_password)
+            if not smtp_ok and not (self.env == "preview" and self.email_backend == "none"):
                 raise ValueError("deployed environments need EMAIL_BACKEND=smtp with SMTP_HOST, SMTP_PASSWORD and "
                                  "EMAIL_FROM (password reset must actually deliver)")
+            if self.env == "preview" and not self.signup_allowlist:
+                raise ValueError("preview needs SIGNUP_ALLOWLIST: a private preview must not accept public sign-ups")
             if not self.public_web_url.startswith("https://") or any(not o.startswith("https://") for o in self.cors_origins):
                 raise ValueError("PUBLIC_WEB_URL and CORS_ORIGINS must be https:// when deployed")
             if self.ai_daily_budget_usd <= 0:
@@ -139,7 +155,7 @@ class Settings(BaseSettings):
                                      "trigger")
             if not self.legal_terms_version:
                 raise ValueError("set LEGAL_TERMS_VERSION (the approved privacy policy/terms version) when deployed")
-            if self.file_scanner == "disabled_dev_only":
+            if self.file_scanner == "disabled_dev_only" and not preview_no_uploads:
                 raise ValueError("file scanning cannot be disabled in production")
             if self.auth_mode == "external_jwt" and not (self.external_jwks_url and self.external_jwt_audience):
                 raise ValueError("external_jwt mode needs EXTERNAL_JWKS_URL and EXTERNAL_JWT_AUDIENCE")
