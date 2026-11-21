@@ -46,8 +46,8 @@ services:
         sync: false
       - key: OPENAI_API_KEY            # empty = AI reports "not configured"; paste the key on the Environment page
         sync: false
-      - key: PUBLIC_WEB_URL            # replaced with the web service's real onrender.com URL after creation
-        value: https://newage-web-preview.onrender.com
+      - key: PUBLIC_WEB_URL            # the web service's URL (Render added the -3tfd suffix)
+        value: https://newage-web-preview-3tfd.onrender.com
       - key: TRUSTED_PROXIES           # Render's edge proxy [verify range]; it appends the caller's real IP
         value: '["10.0.0.0/8"]'
       - key: UPLOADS_ENABLED
