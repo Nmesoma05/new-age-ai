@@ -23,7 +23,9 @@ owner), or **superseded**.
 - New `ENV=preview`: counts as deployed (https, JSON logs, API docs hidden, AI daily budget + model prices required)
   but allows `UPLOADS_ENABLED=false` (then local storage and no scanner are accepted), `EMAIL_BACKEND=none`, and
   requires `SIGNUP_ALLOWLIST`. staging and prod keep every guard (tested).
-- `render/preview.yaml`: Postgres 16 (basic-256mb), the API as a **private service** (no public URL), the web as the
+- `render/preview.yaml` (FREE plan, chosen by Stephen 2026-11-21): Postgres 16 free (expires after 30 days, no backups),
+  the API as a public free web service (free services cannot receive private traffic), the web service; both sleep
+  when idle. Paid alternative kept in the file header (private API, basic-256mb). Originally: the web as the
   only public service. Render builds from the Dockerfiles in this repo.
 - Database roles: Render's default user (not a superuser) is the owner and runs migrations; `scripts/render_start.py`
   creates the restricted `eco_app` role (checked: no superuser/BYPASSRLS/CREATEROLE) and starts the API as eco_app.
