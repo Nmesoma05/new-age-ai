@@ -28,6 +28,10 @@ class Settings(BaseSettings):
     login_max_failures: int = 10
     # Emails allowed to create an account (JSON list, lower case). Empty = anyone. Required in preview.
     signup_allowlist: list[str] = []
+    signup_open: bool = False  # true: anyone may sign up (overrides the allowlist); preview needs this or an allowlist
+    # Shared with our web server: lets it pass the visitor's X-Forwarded-For chain when it reaches the API over the
+    # public internet (see app/core/clientip.py). Empty = off.
+    web_forward_secret: SecretStr | None = None
     login_lockout_minutes: int = 15
     # Per-IP limits on unauthenticated endpoints (0 = off). The client IP comes from X-Forwarded-For only via
     # TRUSTED_PROXIES (our web server, load balancer). JSON list of CIDRs.
@@ -116,6 +120,7 @@ class Settings(BaseSettings):
     legal_terms_version: str | None = None          # version users accept at sign-up; required when deployed
 
     @field_validator("openai_api_key", "anthropic_api_key", "paystack_secret_key", "sentry_dsn", "smtp_password",
+                     "web_forward_secret",
                      "google_oauth_client_secret", mode="before")
     @classmethod
     def _blank_secret_is_unset(cls, v):
@@ -142,8 +147,9 @@ class Settings(BaseSettings):
             if not smtp_ok and not (self.env == "preview" and self.email_backend == "none"):
                 raise ValueError("deployed environments need EMAIL_BACKEND=smtp with SMTP_HOST, SMTP_PASSWORD and "
                                  "EMAIL_FROM (password reset must actually deliver)")
-            if self.env == "preview" and not self.signup_allowlist:
-                raise ValueError("preview needs SIGNUP_ALLOWLIST: a private preview must not accept public sign-ups")
+            if self.env == "preview" and not (self.signup_allowlist or self.signup_open):
+                raise ValueError("preview needs SIGNUP_ALLOWLIST, or SIGNUP_OPEN=true to accept public sign-ups on "
+                                 "purpose")
             if not self.public_web_url.startswith("https://") or any(not o.startswith("https://") for o in self.cors_origins):
                 raise ValueError("PUBLIC_WEB_URL and CORS_ORIGINS must be https:// when deployed")
             if self.ai_daily_budget_usd <= 0:

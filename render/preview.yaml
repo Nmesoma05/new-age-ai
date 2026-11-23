@@ -1,5 +1,5 @@
 # Render Blueprint: PRIVATE PREVIEW of New Age AI (ENV=preview), on Render's FREE plan. Not staging, not production.
-# Uploads and email are off, sign-up is limited to SIGNUP_ALLOWLIST. Render builds both images from this repo.
+# Uploads and email are off. Sign-up is open to anyone (SIGNUP_OPEN=true). Render builds both images from this repo.
 # Free-plan limits (accepted for the preview, 2026-11-21): services sleep after 15 min idle (~1 min to wake), the free
 # database expires 30 days after creation (14-day grace to upgrade) and has no backups, and the API must be a PUBLIC
 # web service because free services can't receive private-network traffic (every endpoint still needs sign-in).
@@ -42,8 +42,12 @@ services:
         generateValue: true
       - key: CREDENTIALS_ENCRYPTION_KEY  # Fernet key (urlsafe base64), not a generateValue
         sync: false
-      - key: SIGNUP_ALLOWLIST          # JSON list of emails allowed to sign up
+      - key: SIGNUP_ALLOWLIST          # JSON list of emails allowed to sign up (ignored while SIGNUP_OPEN=true)
         sync: false
+      - key: SIGNUP_OPEN               # anyone may sign up (Stephen's decision, 2026-11-23)
+        value: "true"
+      - key: WEB_FORWARD_SECRET        # shared with the web service so the API sees each visitor's real IP
+        generateValue: true
       - key: OPENAI_API_KEY            # unused while AI_PROVIDER=anthropic; empty = not configured
         sync: false
       # ANTHROPIC_API_KEY is added by hand on the service's Environment page (never in git or chat)
@@ -95,3 +99,5 @@ services:
         value: "true"
       - key: NOINDEX                   # keep the preview out of search engines
         value: "true"
+      - key: WEB_FORWARD_SECRET
+        fromService: {name: newage-api-preview, type: web, envVarKey: WEB_FORWARD_SECRET}

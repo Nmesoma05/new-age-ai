@@ -50,12 +50,20 @@ export function problem(status: number, code: string, title: string, detail: str
 // always passed on. X-Forwarded-For is passed on only when this server sits behind a proxy that sets it
 // (TRUST_FORWARDED_FOR=true, e.g. a load balancer or Vercel); otherwise a visitor could write their own.
 const TRUST_XFF = process.env.TRUST_FORWARDED_FOR === "true";
+// When the API is reached over the public internet (Render free plan), its own proxy adds THIS server's address to
+// X-Forwarded-For, so every visitor would look the same. We also send the chain we received, with a shared secret
+// the API checks; only then does the API read the visitor's address from it. Server-side only, never in the browser.
+const FORWARD_SECRET = process.env.WEB_FORWARD_SECRET || "";
 export function clientHeaders(req: NextRequest): Record<string, string> {
   const h: Record<string, string> = {};
   const ua = req.headers.get("user-agent");
   if (ua) h["user-agent"] = ua.slice(0, 300);
   const xff = TRUST_XFF ? req.headers.get("x-forwarded-for") : null;
   if (xff) h["x-forwarded-for"] = xff.slice(0, 500);
+  if (xff && FORWARD_SECRET) {
+    h["x-eco-forwarded-for"] = xff.slice(0, 500);
+    h["x-eco-forward-secret"] = FORWARD_SECRET;
+  }
   return h;
 }
 

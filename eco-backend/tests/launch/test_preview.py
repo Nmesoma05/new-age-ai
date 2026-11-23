@@ -88,3 +88,48 @@ def test_app_url_swaps_in_the_app_role_and_escapes_the_password():
 def test_blank_api_key_means_not_configured():
     s = _settings(**PREVIEW, openai_api_key="  ")
     assert s.openai_api_key is None  # the provider then reports "provider_not_configured" instead of calling out
+
+
+# ---------------------------------------------------------------- open sign-up
+def test_preview_accepts_open_signup_on_purpose():
+    s = _settings(**{**PREVIEW, "signup_allowlist": [], "signup_open": True})
+    assert s.signup_open
+
+
+async def test_signup_open_overrides_the_allowlist(client, monkeypatch):
+    s = get_settings()
+    monkeypatch.setattr(s, "signup_allowlist", ["stephen@example.com"])
+    monkeypatch.setattr(s, "signup_open", True)
+    r = await client.post("/v1/auth/signup", json={"email": "anyone@example.com", "password": "correct-horse-battery",
+                                                   "display_name": "A"})
+    assert r.status_code == 201, r.text
+
+
+# ---------------------------------------------------------------- visitor IP when the API is reached publicly
+class _Req:
+    def __init__(self, peer, headers):
+        self.client = type("C", (), {"host": peer})()
+        self.headers = headers
+
+
+def test_visitor_ip_comes_from_our_web_server_only_with_the_secret(monkeypatch):
+    from pydantic import SecretStr
+
+    from app.core.clientip import client_ip
+    s = get_settings()
+    monkeypatch.setattr(s, "web_forward_secret", SecretStr("s3cret-shared-value"))
+    # Render's proxy (10.x, trusted) -> XFF ends with the WEB SERVER's public address
+    base = {"x-forwarded-for": "6.6.6.6, 203.0.113.9, 34.1.2.3"}
+    good = {**base, "x-eco-forward-secret": "s3cret-shared-value", "x-eco-forwarded-for": "6.6.6.6, 203.0.113.9"}
+    monkeypatch.setattr(s, "trusted_proxies", ["10.0.0.0/8"])
+    from app.core import clientip
+    clientip._trusted.cache_clear()
+    try:
+        assert client_ip(_Req("10.1.2.3", good)) == "203.0.113.9"       # the visitor; spoofed left entry ignored
+        bad = {**good, "x-eco-forward-secret": "guess"}
+        assert client_ip(_Req("10.1.2.3", bad)) == "34.1.2.3"           # wrong secret: header ignored
+        assert client_ip(_Req("10.1.2.3", base)) == "34.1.2.3"          # no secret sent: header ignored
+        monkeypatch.setattr(s, "web_forward_secret", None)
+        assert client_ip(_Req("10.1.2.3", good)) == "34.1.2.3"          # feature off: header ignored
+    finally:
+        clientip._trusted.cache_clear()
